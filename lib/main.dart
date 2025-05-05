@@ -7,6 +7,7 @@ import 'firebase_options.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
 import 'home_page.dart';
+import 'workout_page.dart';
 import 'providers/avatar_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/workout_provider.dart';
@@ -78,6 +79,7 @@ class FitnessApp extends StatelessWidget {
         '/login': (context) => const LoginPage(),
         '/signup': (context) => const SignUpPage(),
         '/home': (context) => const HomePage(),
+        '/workout': (context) => const WorkoutPage(),
       },
     );
   }

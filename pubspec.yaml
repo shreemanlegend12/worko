@@ -70,8 +70,13 @@ flutter:
     - assets/avatars/avatar4.png
     - assets/avatars/avatar5.png
     - assets/images/workouts/full_body.jpg
+    - assets/login.jpeg
+    - assets/signup.jpeg
+    - assets/images/workouts/pushup.jpg
+    - assets/images/workouts/squat.jpg
+    - assets/images/workouts/pullup.jpg
 
-  # An image asset can refer to one or more resolution-specific "variants", see
+  # An image asset can refer to one or more resolution-specific "variants", sees
   # https://flutter.dev/to/resolution-aware-images
 
   # For details regarding adding assets from package dependencies, see

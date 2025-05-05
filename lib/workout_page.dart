@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'models/workout.dart';
+import 'workout_detail_page.dart';
 
 class WorkoutPage extends StatefulWidget {
+  static const String routeName = '/workout';
+
   const WorkoutPage({Key? key}) : super(key: key);
 
   @override
@@ -23,7 +26,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
 
   // Sample workout data
   final List<Workout> _workouts = [
-    const Workout(
+    Workout(
       id: '1',
       title: 'Full Body Workout',
       description: 'Complete full body workout targeting all major muscle groups',
@@ -32,6 +35,32 @@ class _WorkoutPageState extends State<WorkoutPage> {
       difficulty: 'Beginner',
       category: 'Strength',
       imageUrl: 'assets/images/workouts/full_body.jpg',
+      exercises: [
+        Exercise(
+          name: 'Push-ups',
+          description: 'Classic push-ups targeting chest, shoulders, and triceps',
+          targetMuscles: 'Chest, Shoulders, Triceps',
+          sets: 3,
+          reps: 12,
+          imageUrl: 'assets/images/workouts/pushup.jpg',
+        ),
+        Exercise(
+          name: 'Squats',
+          description: 'Basic squats targeting quadriceps, hamstrings, and glutes',
+          targetMuscles: 'Quadriceps, Hamstrings, Glutes',
+          sets: 4,
+          reps: 15,
+          imageUrl: 'assets/images/workouts/squat.jpg',
+        ),
+        Exercise(
+          name: 'Pull-ups',
+          description: 'Basic pull-ups targeting back and biceps',
+          targetMuscles: 'Back, Biceps',
+          sets: 3,
+          reps: 8,
+          imageUrl: 'assets/images/workouts/pullup.jpg',
+        ),
+      ],
     ),
   ];
 
@@ -247,7 +276,12 @@ class WorkoutCard extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Handle start workout
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => WorkoutDetailPage(workout: workout),
+                        ),
+                      );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF4285F4),
