@@ -1,9 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import 'firebase_options.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
 import 'home_page.dart';
@@ -11,6 +11,7 @@ import 'workout_page.dart';
 import 'providers/avatar_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/workout_provider.dart';
+import 'fitness_goal_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -80,6 +81,7 @@ class FitnessApp extends StatelessWidget {
         '/signup': (context) => const SignUpPage(),
         '/home': (context) => const HomePage(),
         '/workout': (context) => const WorkoutPage(),
+        '/fitness-goals': (context) => const FitnessGoalsPage(),
       },
     );
   }

@@ -7,13 +7,13 @@ import 'package:flutter/foundation.dart'
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
 /// Example:
-/// ```dart
+/// dart
 /// import 'firebase_options.dart';
 /// // ...
 /// await Firebase.initializeApp(
 ///   options: DefaultFirebaseOptions.currentPlatform,
 /// );
-/// ```
+/// 
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -47,6 +47,7 @@ class DefaultFirebaseOptions {
     projectId: 'worky-9c29e',
     authDomain: 'worky-9c29e.firebaseapp.com',
     storageBucket: 'worky-9c29e.appspot.com',
+    databaseURL: 'https://worky-9c29e-default-rtdb.asia-southeast1.firebasedatabase.app/',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
@@ -55,6 +56,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '736501587460',
     projectId: 'worky-9c29e',
     storageBucket: 'worky-9c29e.appspot.com',
+    databaseURL: 'https://worky-9c29e-default-rtdb.asia-southeast1.firebasedatabase.app/',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -64,6 +66,7 @@ class DefaultFirebaseOptions {
     projectId: 'worky-9c29e',
     storageBucket: 'worky-9c29e.appspot.com',
     iosBundleId: 'com.example.workout',
+    databaseURL: 'https://worky-9c29e-default-rtdb.asia-southeast1.firebasedatabase.app/',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,6 +76,7 @@ class DefaultFirebaseOptions {
     projectId: 'worky-9c29e',
     storageBucket: 'worky-9c29e.firebasestorage.app',
     iosBundleId: 'com.example.workout',
+    databaseURL: 'https://worky-9c29e-default-rtdb.asia-southeast1.firebasedatabase.app/',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
@@ -82,5 +86,6 @@ class DefaultFirebaseOptions {
     projectId: 'worky-9c29e',
     authDomain: 'worky-9c29e.firebaseapp.com',
     storageBucket: 'worky-9c29e.firebasestorage.app',
+    databaseURL: 'https://worky-9c29e-default-rtdb.asia-southeast1.firebasedatabase.app/',
   );
 }

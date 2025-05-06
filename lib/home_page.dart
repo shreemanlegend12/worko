@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'dart:async';
 import 'profile_page.dart';
 import 'workout_page.dart';
 import 'progress_page.dart';
@@ -18,15 +21,86 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   late int _selectedIndex;
+  Map<String, dynamic> _workoutStats = {
+    'totalCalories': 0,
+    'totalWorkouts': 0,
+    'totalDuration': 0,
+  };
+  Timer? _refreshTimer;
+  StreamSubscription? _workoutHistorySubscription;
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex;
+    
     // Refresh user data when the page loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<UserProvider>(context, listen: false).refreshUser();
     });
+    
+    _fetchWorkoutStats();
+    _setupAutoRefresh();
+    _listenToWorkoutHistory();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _workoutHistorySubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupAutoRefresh() {
+    // Refresh stats every minute
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _fetchWorkoutStats();
+    });
+  }
+
+  void _listenToWorkoutHistory() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+    
+    _workoutHistorySubscription = FirebaseDatabase.instance
+        .ref('weeklyStats/$userId')
+        .onValue
+        .listen((event) {
+      if (event.snapshot.exists) {
+        _fetchWorkoutStats(); // Refresh stats when changes occur
+      }
+    });
+  }
+
+  void _fetchWorkoutStats() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    final now = DateTime.now();
+    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+    final weekKey = '${weekStart.year}-${weekStart.month}-${weekStart.day}';
+    
+    final weeklyStatsRef = FirebaseDatabase.instance.ref('weeklyStats/$userId/$weekKey');
+    final snapshot = await weeklyStatsRef.get();
+
+    if (snapshot.exists) {
+      final data = Map<String, dynamic>.from(snapshot.value as Map);
+      setState(() {
+        _workoutStats = {
+          'totalCalories': data['totalCalories'] ?? 0,
+          'totalWorkouts': data['totalWorkouts'] ?? 0,
+          'totalDuration': data['totalDuration'] ?? 0,
+        };
+      });
+    } else {
+      setState(() {
+        _workoutStats = {
+          'totalCalories': 0,
+          'totalWorkouts': 0,
+          'totalDuration': 0,
+        };
+      });
+    }
   }
 
   List<Widget> _getWidgetOptions() {
@@ -183,21 +257,21 @@ class _HomePageState extends State<HomePage> {
                 icon: Icons.fitness_center,
                 iconColor: const Color(0xFF4285F4),
                 iconBgColor: const Color(0xFFE8F1FE),
-                value: '5',
+                value: '${_workoutStats['totalWorkouts']}',
                 label: 'Workouts',
               ),
               _buildStatItem(
                 icon: Icons.local_fire_department,
                 iconColor: const Color(0xFFF85C5C),
                 iconBgColor: const Color(0xFFFEE8E8),
-                value: '1250',
+                value: '${_workoutStats['totalCalories']}',
                 label: 'Calories',
               ),
               _buildStatItem(
                 icon: Icons.timer,
                 iconColor: const Color(0xFF4CD964),
                 iconBgColor: const Color(0xFFE8FEF0),
-                value: '180',
+                value: '${(_workoutStats['totalDuration'] / 60).round()}',
                 label: 'Minutes',
               ),
             ],
@@ -307,15 +381,45 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildTodaysWorkoutSection() {
-    final workout = const Workout(
+    // Use the actual Full Body Workout with correct values
+    final Workout workout = Workout(
       id: '1',
       title: 'Full Body Workout',
       description: 'Complete full body workout targeting all major muscle groups',
-      duration: 45,
-      calories: 350,
+      duration: 20,
+      calories: 120,
       difficulty: 'Beginner',
       category: 'Strength',
       imageUrl: 'assets/images/workouts/full_body.jpg',
+      exercises: [
+        Exercise(
+          name: 'Push-ups',
+          description: 'Classic push-ups targeting chest, shoulders, and triceps',
+          targetMuscles: 'Chest, Shoulders, Triceps',
+          sets: 3,
+          reps: 12,
+          calories: 45,
+          imageUrl: 'assets/images/workouts/pushup.jpg',
+        ),
+        Exercise(
+          name: 'Squats',
+          description: 'Basic squats targeting quadriceps, hamstrings, and glutes',
+          targetMuscles: 'Quadriceps, Hamstrings, Glutes',
+          sets: 4,
+          reps: 15,
+          calories: 35,
+          imageUrl: 'assets/images/workouts/squat.jpg',
+        ),
+        Exercise(
+          name: 'Pull-ups',
+          description: 'Basic pull-ups targeting back and biceps',
+          targetMuscles: 'Back, Biceps',
+          sets: 3,
+          reps: 8,
+          calories: 40,
+          imageUrl: 'assets/images/workouts/pullup.jpg',
+        ),
+      ],
     );
 
     return GestureDetector(

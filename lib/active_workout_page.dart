@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'models/workout.dart';
 
 class ActiveWorkoutPage extends StatefulWidget {
@@ -20,6 +22,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
   late Timer _timer;
   Duration _elapsed = const Duration();
   bool _isActive = true;
+  int _caloriesBurned = 0;
+  Map<int, bool> _exerciseCompleted = {};
 
   @override
   void initState() {
@@ -28,6 +32,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
       widget.workout.exercises.length,
       (index) => <int>{},
     );
+    _exerciseCompleted = {};
     startTimer();
   }
 
@@ -70,7 +75,18 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
     return completedSets[currentExerciseIndex].contains(setIndex);
   }
 
-  void onCompleteExercise() {
+  bool isExerciseComplete() {
+    return completedSets[currentExerciseIndex].length == currentExercise.sets;
+  }
+
+  void onCompleteExercise() async {
+    if (!_exerciseCompleted.containsKey(currentExerciseIndex)) {
+      setState(() {
+        _caloriesBurned += currentExercise.calories;
+        _exerciseCompleted[currentExerciseIndex] = true;
+      });
+    }
+
     if (currentExerciseIndex < widget.workout.exercises.length - 1) {
       setState(() {
         currentExerciseIndex++;
@@ -78,13 +94,78 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
     } else {
       // Workout completed
       _timer.cancel();
+      
+      // Save workout statistics to Firebase
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId != null) {
+        final now = DateTime.now();
+        
+        // Save to workout history
+        final workoutRef = FirebaseDatabase.instance.ref('workoutHistory/$userId').push();
+        await workoutRef.set({
+          'workoutId': widget.workout.id,
+          'workoutTitle': widget.workout.title,
+          'completedAt': now.toIso8601String(),
+          'duration': _elapsed.inSeconds,
+          'caloriesBurned': _caloriesBurned,
+          'exercisesCompleted': widget.workout.exercises.length,
+        });
+
+        // Update weekly stats
+        final weekStart = now.subtract(Duration(days: now.weekday - 1));
+        final weekKey = '${weekStart.year}-${weekStart.month}-${weekStart.day}';
+        final weeklyStatsRef = FirebaseDatabase.instance.ref('weeklyStats/$userId/$weekKey');
+        final weeklySnapshot = await weeklyStatsRef.get();
+        
+        if (weeklySnapshot.exists) {
+          final data = Map<String, dynamic>.from(weeklySnapshot.value as Map);
+          await weeklyStatsRef.update({
+            'totalCalories': (data['totalCalories'] ?? 0) + _caloriesBurned,
+            'totalWorkouts': (data['totalWorkouts'] ?? 0) + 1,
+            'totalDuration': (data['totalDuration'] ?? 0) + _elapsed.inSeconds,
+          });
+        } else {
+          await weeklyStatsRef.set({
+            'totalCalories': _caloriesBurned,
+            'totalWorkouts': 1,
+            'totalDuration': _elapsed.inSeconds,
+            'weekStart': weekStart.toIso8601String(),
+          });
+        }
+
+        // Update monthly stats
+        final monthStart = DateTime(now.year, now.month, 1);
+        final monthKey = '${monthStart.year}-${monthStart.month}-${monthStart.day}';
+        final monthlyStatsRef = FirebaseDatabase.instance.ref('monthlyStats/$userId/$monthKey');
+        final monthlySnapshot = await monthlyStatsRef.get();
+
+        if (monthlySnapshot.exists) {
+          final data = Map<String, dynamic>.from(monthlySnapshot.value as Map);
+          await monthlyStatsRef.update({
+            'totalCalories': (data['totalCalories'] ?? 0) + _caloriesBurned,
+            'totalWorkouts': (data['totalWorkouts'] ?? 0) + 1,
+            'totalDuration': (data['totalDuration'] ?? 0) + _elapsed.inSeconds,
+          });
+        } else {
+          await monthlyStatsRef.set({
+            'totalCalories': _caloriesBurned,
+            'totalWorkouts': 1,
+            'totalDuration': _elapsed.inSeconds,
+            'monthStart': monthStart.toIso8601String(),
+          });
+        }
+      }
+
+      if (!mounted) return;
       Navigator.popUntil(
         context,
         (route) => route.settings.name == '/workout' || route.isFirst,
       );
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout completed! Great job!'),
+        SnackBar(
+          content: Text(
+            'Workout completed! Calories burned: $_caloriesBurned, Time: $formattedTime',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -123,7 +204,24 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              margin: const EdgeInsets.only(right: 16),
+              decoration: BoxDecoration(
+                color: Colors.orange[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$_caloriesBurned cal',
+                style: TextStyle(
+                  color: Colors.orange[700],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       body: Column(

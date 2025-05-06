@@ -5,6 +5,7 @@ class Exercise {
   final int sets;
   final int reps;
   final String? imageUrl;
+  final int calories; // Added calories per exercise
 
   const Exercise({
     required this.name,
@@ -13,6 +14,7 @@ class Exercise {
     required this.sets,
     required this.reps,
     this.imageUrl,
+    required this.calories,
   });
 }
 

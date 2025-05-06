@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:provider/provider.dart';
-import 'providers/avatar_provider.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -14,6 +13,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final FirebaseDatabase _database = FirebaseDatabase.instance;
   final _formKey = GlobalKey<FormState>();
   final _auth = FirebaseAuth.instance;
   bool _isLoading = false;
@@ -27,50 +27,56 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _createAccount() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  if (_formKey.currentState!.validate()) {
+    setState(() {
+      _isLoading = true;
+    });
 
-      try {
-        // Create user with email and password
-        final userCredential = await _auth.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+    try {
+      // Create user with email and password
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      
+      // Update user profile with full name
+      await userCredential.user?.updateDisplayName(_fullNameController.text.trim());
+
+      // Push user data to Firebase Realtime Database
+      await _database.ref().child('users').child(userCredential.user!.uid).set({
+        'fullName': _fullNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      
+      if (mounted) {
+        // Navigate to the fitness goals questionnaire
+        Navigator.pushReplacementNamed(context, '/fitness-goals');
+      }
+    } on FirebaseAuthException catch (e) {
+      String message = 'An error occurred';
+      if (e.code == 'weak-password') {
+        message = 'The password provided is too weak';
+      } else if (e.code == 'email-already-in-use') {
+        message = 'An account already exists for that email';
+      } else if (e.code == 'invalid-email') {
+        message = 'Invalid email format';
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
         );
-        
-        // Update user profile with full name
-        await userCredential.user?.updateDisplayName(_fullNameController.text.trim());
-        
-        if (mounted) {
-          // Let AuthGate handle the navigation and avatar initialization
-          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
-        }
-      } on FirebaseAuthException catch (e) {
-        String message = 'An error occurred';
-        if (e.code == 'weak-password') {
-          message = 'The password provided is too weak';
-        } else if (e.code == 'email-already-in-use') {
-          message = 'An account already exists for that email';
-        } else if (e.code == 'invalid-email') {
-          message = 'Invalid email format';
-        }
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message)),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
-
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
