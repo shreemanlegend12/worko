@@ -27,56 +27,85 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _createAccount() async {
-  if (_formKey.currentState!.validate()) {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      // Create user with email and password
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-      
-      // Update user profile with full name
-      await userCredential.user?.updateDisplayName(_fullNameController.text.trim());
-
-      // Push user data to Firebase Realtime Database
-      await _database.ref().child('users').child(userCredential.user!.uid).set({
-        'fullName': _fullNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'createdAt': DateTime.now().toIso8601String(),
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
       });
-      
-      if (mounted) {
-        // Navigate to the fitness goals questionnaire
-        Navigator.pushReplacementNamed(context, '/fitness-goals');
-      }
-    } on FirebaseAuthException catch (e) {
-      String message = 'An error occurred';
-      if (e.code == 'weak-password') {
-        message = 'The password provided is too weak';
-      } else if (e.code == 'email-already-in-use') {
-        message = 'An account already exists for that email';
-      } else if (e.code == 'invalid-email') {
-        message = 'Invalid email format';
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+
+      try {
+        // Create user with email and password
+        final userCredential = await _auth.createUserWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
+        
+        // Update user profile with full name
+        await userCredential.user?.updateDisplayName(_fullNameController.text.trim());
+
+        final now = DateTime.now();
+        final weekStart = now.subtract(Duration(days: now.weekday - 1));
+        final weekKey = '${weekStart.year}-${weekStart.month}-${weekStart.day}';
+        final monthStart = DateTime(now.year, now.month, 1);
+        final monthKey = '${monthStart.year}-${monthStart.month}-${monthStart.day}';
+
+        // Initialize user data structure
+        await _database.ref().child('users').child(userCredential.user!.uid).set({
+          'fullName': _fullNameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'createdAt': now.toIso8601String(),
         });
+
+        // Initialize empty workout stats
+        await _database.ref('weeklyStats/${userCredential.user!.uid}/$weekKey').set({
+          'totalCalories': 0,
+          'totalWorkouts': 0,
+          'totalDuration': 0,
+          'weekStart': weekStart.toIso8601String(),
+        });
+
+        await _database.ref('monthlyStats/${userCredential.user!.uid}/$monthKey').set({
+          'totalCalories': 0,
+          'totalWorkouts': 0,
+          'totalDuration': 0,
+          'monthStart': monthStart.toIso8601String(),
+        });
+
+        // Initialize user goals with defaults
+        await _database.ref('userGoals/${userCredential.user!.uid}').set({
+          'workoutDays': 3,  // Conservative default
+          'calorieGoal': 2000,  // Conservative default
+          'weeklyHours': 5,  // Conservative default
+        });
+        
+        if (mounted) {
+          // Navigate to the fitness goals questionnaire
+          Navigator.pushReplacementNamed(context, '/fitness-goals');
+        }
+      } on FirebaseAuthException catch (e) {
+        String message = 'An error occurred';
+        if (e.code == 'weak-password') {
+          message = 'The password provided is too weak';
+        } else if (e.code == 'email-already-in-use') {
+          message = 'An account already exists for that email';
+        } else if (e.code == 'invalid-email') {
+          message = 'Invalid email format';
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
-}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

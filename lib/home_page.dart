@@ -54,7 +54,9 @@ class _HomePageState extends State<HomePage> {
   void _setupAutoRefresh() {
     // Refresh stats every minute
     _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      _fetchWorkoutStats();
+      if (mounted) {
+        _fetchWorkoutStats();
+      }
     });
   }
 
@@ -62,12 +64,15 @@ class _HomePageState extends State<HomePage> {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
     
+    // Cancel any existing subscription
+    _workoutHistorySubscription?.cancel();
+    
     _workoutHistorySubscription = FirebaseDatabase.instance
         .ref('weeklyStats/$userId')
         .onValue
         .listen((event) {
-      if (event.snapshot.exists) {
-        _fetchWorkoutStats(); // Refresh stats when changes occur
+      if (event.snapshot.exists && mounted) {
+        _fetchWorkoutStats();
       }
     });
   }
@@ -80,24 +85,33 @@ class _HomePageState extends State<HomePage> {
     final weekStart = now.subtract(Duration(days: now.weekday - 1));
     final weekKey = '${weekStart.year}-${weekStart.month}-${weekStart.day}';
     
+    // Check if stats exist for current week, if not initialize them
     final weeklyStatsRef = FirebaseDatabase.instance.ref('weeklyStats/$userId/$weekKey');
     final snapshot = await weeklyStatsRef.get();
 
-    if (snapshot.exists) {
+    if (!snapshot.exists) {
+      // Initialize empty stats for new week
+      await weeklyStatsRef.set({
+        'totalCalories': 0,
+        'totalWorkouts': 0,
+        'totalDuration': 0,
+        'weekStart': weekStart.toIso8601String(),
+      });
+      
+      setState(() {
+        _workoutStats = {
+          'totalCalories': 0,
+          'totalWorkouts': 0,
+          'totalDuration': 0,
+        };
+      });
+    } else {
       final data = Map<String, dynamic>.from(snapshot.value as Map);
       setState(() {
         _workoutStats = {
           'totalCalories': data['totalCalories'] ?? 0,
           'totalWorkouts': data['totalWorkouts'] ?? 0,
           'totalDuration': data['totalDuration'] ?? 0,
-        };
-      });
-    } else {
-      setState(() {
-        _workoutStats = {
-          'totalCalories': 0,
-          'totalWorkouts': 0,
-          'totalDuration': 0,
         };
       });
     }
