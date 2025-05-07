@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:provider/provider.dart';
 import 'providers/avatar_provider.dart';
 import 'providers/user_provider.dart';
@@ -164,18 +165,52 @@ class _SettingsPageState extends State<SettingsPage> {
 
     setState(() => _isLoading = true);
     try {
+      // Re-authenticate user before deleting
       final user = _auth.currentUser;
-      if (user != null) {
-        // Delete user data from Firebase Auth
+      if (user == null) throw Exception('No user logged in');
+
+      // First delete user data from database
+      final userId = user.uid;
+      final database = FirebaseDatabase.instance;
+      
+      try {
+        await Future.wait([
+          database.ref('users/$userId').remove(),
+          database.ref('weeklyStats/$userId').remove(),
+          database.ref('userGoals/$userId').remove(),
+        ]);
+      } catch (dbError) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete user data: ${dbError.toString()}')),
+          );
+          return;
+        }
+      }
+      
+      // Then delete the user account
+      try {
         await user.delete();
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        }
+      } on FirebaseAuthException catch (authError) {
+        String message = 'Failed to delete account';
+        if (authError.code == 'requires-recent-login') {
+          message = 'Please log out and log in again before deleting your account';
+        } else {
+          message = 'Error: ${authError.message}';
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete account')),
+          SnackBar(content: Text('Failed to delete account: ${e.toString()}')),
         );
       }
     } finally {

@@ -20,10 +20,11 @@ class _ProgressPageState extends State<ProgressPage> {
     'activeWorkoutDays': 0,
     'avgTimePerDay': 0.0,
   };
-  
+  bool _isLoading = true;
+
   late final Map<String, List<double>> activityData = _initActivityData();
   late final Map<String, List<String>> periodLabels = _initPeriodLabels();
-  
+
   Map<String, List<String>> _initPeriodLabels() {
     return {
       'Weekly': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -39,11 +40,19 @@ class _ProgressPageState extends State<ProgressPage> {
   @override
   void initState() {
     super.initState();
-    _fetchGoals();
-    _fetchWorkoutStats();
+    _loadData();
   }
 
-  void _fetchGoals() async {
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    await Future.wait<void>([
+      _fetchGoals(),
+      Future<void>(() async => await _fetchWorkoutStats()),
+    ]);
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _fetchGoals() async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId != null) {
       try {
@@ -79,7 +88,7 @@ class _ProgressPageState extends State<ProgressPage> {
     }
   }
 
-  void _fetchWorkoutStats() async {
+  Future<void> _fetchWorkoutStats() async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) {
       print("No user ID available for workout stats");
@@ -315,21 +324,27 @@ class _ProgressPageState extends State<ProgressPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Progress', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              _buildActivityCard(),
-              const SizedBox(height: 16),
-              _buildMetricsRow(),
-              const SizedBox(height: 16),
-              _buildGoalsCard(),
-            ],
-          ),
-        ),
+        child: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4285F4)),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Progress', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  _buildActivityCard(),
+                  const SizedBox(height: 16),
+                  _buildMetricsRow(),
+                  const SizedBox(height: 16),
+                  _buildGoalsCard(),
+                ],
+              ),
+            ),
       ),
     );
   }
@@ -394,6 +409,19 @@ class _ProgressPageState extends State<ProgressPage> {
   }
 
   Widget _buildMetricsRow() {
+    String formatTime(double seconds) {
+      if (seconds < 60) {
+        return "${seconds.toInt()}s";
+      }
+      final minutes = (seconds / 60).toInt();
+      if (minutes < 60) {
+        return "${minutes}m";
+      }
+      final hours = (minutes / 60).toInt();
+      final remainingMinutes = minutes % 60;
+      return "${hours}h ${remainingMinutes}m";
+    }
+
     return Row(
       children: [
         Expanded(child: _buildMetricCard('${_workoutStats['activeWorkoutDays']}', 'Active Days')),
@@ -401,8 +429,8 @@ class _ProgressPageState extends State<ProgressPage> {
         Expanded(child: _buildMetricCard('${_workoutStats['weeklyCalories']}', 'Weekly Calories')),
         const SizedBox(width: 12),
         Expanded(child: _buildMetricCard(
-          (_workoutStats['avgTimePerDay'] / 60).toStringAsFixed(2), 
-          'Avg min/Day'
+          formatTime(_workoutStats['avgTimePerDay'] ?? 0),
+          'Avg Time/Day'
         )),
       ],
     );

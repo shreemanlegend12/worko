@@ -183,8 +183,6 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 24),
           _buildWeeklySummary(),
           const SizedBox(height: 24),
-          _buildPremiumCard(),
-          const SizedBox(height: 24),
           _buildTodaysWorkoutSection(),
         ],
       ),
@@ -338,62 +336,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildPremiumCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFF4285F4),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Upgrade to Premium',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Get access to intermediate and advanced workout plans',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            width: double.infinity,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TextButton(
-              onPressed: () {
-                setState(() {
-                  _selectedIndex = 3; // Switch to Upgrade page
-                });
-              },
-              child: const Text(
-                'Upgrade Now',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF4285F4),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildTodaysWorkoutSection() {
     // Use the actual Full Body Workout with correct values
     final Workout workout = Workout(
@@ -484,7 +426,7 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Icon(Icons.timer_outlined, size: 16, color: Colors.grey[600]),
+                      Icon(Icons.timer_outlined, size: 16, color: Colors.blue[600]),
                       const SizedBox(width: 4),
                       Text(
                         '${workout.duration} min',
@@ -493,7 +435,7 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(width: 16),
                       Icon(Icons.local_fire_department_outlined, 
                            size: 16, 
-                           color: Colors.grey[600]),
+                           color: Colors.orange[600]),
                       const SizedBox(width: 4),
                       Text(
                         '${workout.calories} cal',

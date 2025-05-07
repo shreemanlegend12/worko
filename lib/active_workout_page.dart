@@ -59,7 +59,12 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
     return '$minutes:$seconds';
   }
 
-  Exercise get currentExercise => widget.workout.exercises[currentExerciseIndex];
+  Exercise get currentExercise {
+    if (currentExerciseIndex >= widget.workout.exercises.length) {
+      return widget.workout.exercises.last;
+    }
+    return widget.workout.exercises[currentExerciseIndex];
+  }
 
   void completeSet(int setIndex) {
     setState(() {
@@ -72,14 +77,24 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
   }
 
   bool isSetCompleted(int setIndex) {
+    if (currentExerciseIndex >= completedSets.length) {
+      return false;
+    }
     return completedSets[currentExerciseIndex].contains(setIndex);
   }
 
   bool isExerciseComplete() {
+    if (currentExerciseIndex >= completedSets.length) {
+      return true;
+    }
     return completedSets[currentExerciseIndex].length == currentExercise.sets;
   }
 
   void onCompleteExercise() async {
+    if (currentExerciseIndex >= widget.workout.exercises.length) {
+      return;
+    }
+
     if (!_exerciseCompleted.containsKey(currentExerciseIndex)) {
       setState(() {
         _caloriesBurned += currentExercise.calories;
@@ -94,14 +109,49 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
     } else {
       // Workout completed
       _timer.cancel();
-      
+      _isActive = false; // Stop the timer updates
+
       // Save workout statistics to Firebase
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Please log in again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        return;
+      }
+
+      try {
         final now = DateTime.now();
-        
+
+        // Update progress bar before any async operations
+        setState(() {
+          currentExerciseIndex = widget.workout.exercises.length - 1;
+        });
+
+        // Check if user data exists in database
+        final userRef = FirebaseDatabase.instance.ref('users/${user.uid}');
+        final userSnapshot = await userRef.get();
+        if (!userSnapshot.exists) {
+          // Create basic user data if it doesn't exist
+          await userRef.set({
+            'email': user.email,
+            'createdAt': now.toIso8601String(),
+            'lastActive': now.toIso8601String(),
+          });
+        } else {
+          // Update last active timestamp
+          await userRef.update({
+            'lastActive': now.toIso8601String(),
+          });
+        }
+
         // Save to workout history
-        final workoutRef = FirebaseDatabase.instance.ref('workoutHistory/$userId').push();
+        final workoutRef = FirebaseDatabase.instance.ref('workoutHistory/${user.uid}').push();
         await workoutRef.set({
           'workoutId': widget.workout.id,
           'workoutTitle': widget.workout.title,
@@ -111,42 +161,69 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
           'exercisesCompleted': widget.workout.exercises.length,
         });
 
-        // Update weekly stats
+        // Update weekly stats with retry mechanism
         final weekStart = now.subtract(Duration(days: now.weekday - 1));
         final weekKey = '${weekStart.year}-${weekStart.month}-${weekStart.day}';
-        final weeklyStatsRef = FirebaseDatabase.instance.ref('weeklyStats/$userId/$weekKey');
-        final weeklySnapshot = await weeklyStatsRef.get();
+        final weeklyStatsRef = FirebaseDatabase.instance.ref('weeklyStats/${user.uid}/$weekKey');
         
-        if (weeklySnapshot.exists) {
-          final data = Map<String, dynamic>.from(weeklySnapshot.value as Map);
-          await weeklyStatsRef.update({
-            'totalCalories': (data['totalCalories'] ?? 0) + _caloriesBurned,
-            'totalWorkouts': (data['totalWorkouts'] ?? 0) + 1,
-            'totalDuration': (data['totalDuration'] ?? 0) + _elapsed.inSeconds,
-          });
-        } else {
-          await weeklyStatsRef.set({
-            'totalCalories': _caloriesBurned,
-            'totalWorkouts': 1,
-            'totalDuration': _elapsed.inSeconds,
-            'weekStart': weekStart.toIso8601String(),
-          });
-        }
-      }
+        // Retry up to 3 times
+        for (int i = 0; i < 3; i++) {
+          try {
+            final weeklySnapshot = await weeklyStatsRef.get();
 
-      if (!mounted) return;
-      Navigator.popUntil(
-        context,
-        (route) => route.settings.name == '/workout' || route.isFirst,
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Workout completed! Calories burned: $_caloriesBurned, Time: $formattedTime',
+            if (weeklySnapshot.exists) {
+              final data = Map<String, dynamic>.from(weeklySnapshot.value as Map);
+              await weeklyStatsRef.update({
+                'totalCalories': (data['totalCalories'] ?? 0) + _caloriesBurned,
+                'totalWorkouts': (data['totalWorkouts'] ?? 0) + 1,
+                'totalDuration': (data['totalDuration'] ?? 0) + _elapsed.inSeconds,
+                'lastUpdated': now.toIso8601String(),
+              });
+            } else {
+              await weeklyStatsRef.set({
+                'totalCalories': _caloriesBurned,
+                'totalWorkouts': 1,
+                'totalDuration': _elapsed.inSeconds,
+                'weekStart': weekStart.toIso8601String(),
+                'lastUpdated': now.toIso8601String(),
+              });
+            }
+            break; // Success, exit retry loop
+          } catch (e) {
+            if (i == 2) throw e; // On last attempt, rethrow the error
+            await Future.delayed(Duration(seconds: 1)); // Wait before retry
+          }
+        }
+
+        if (!mounted) return;
+
+        // Show completion message before navigation
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Workout completed! Calories burned: $_caloriesBurned, Time: $formattedTime',
+            ),
+            backgroundColor: Colors.green,
           ),
-          backgroundColor: Colors.green,
-        ),
-      );
+        );
+
+        // Add a small delay to ensure state updates and snackbar are processed
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        if (!mounted) return;
+        Navigator.popUntil(
+          context,
+          (route) => route.settings.name == '/workout' || route.isFirst,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving workout: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

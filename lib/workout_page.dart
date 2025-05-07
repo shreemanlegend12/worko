@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'models/workout.dart';
 import 'workout_detail_page.dart';
+import 'models/workout_templates.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class WorkoutPage extends StatefulWidget {
   static const String routeName = '/workout';
@@ -24,49 +28,6 @@ class _WorkoutPageState extends State<WorkoutPage> {
     'Flexibility'
   ];
 
-  // Sample workout data
-  final List<Workout> _workouts = [
-    Workout(
-      id: '1',
-      title: 'Full Body Workout',
-      description: 'Complete full body workout targeting all major muscle groups',
-      duration: 20,
-      calories: 120,
-      difficulty: 'Beginner',
-      category: 'Strength',
-      imageUrl: 'assets/images/workouts/full_body.jpg',
-      exercises: [
-        Exercise(
-          name: 'Push-ups',
-          description: 'Classic push-ups targeting chest, shoulders, and triceps',
-          targetMuscles: 'Chest, Shoulders, Triceps',
-          sets: 3,
-          reps: 12,
-          calories: 45,
-          imageUrl: 'assets/images/workouts/pushup.jpg',
-        ),
-        Exercise(
-          name: 'Squats',
-          description: 'Basic squats targeting quadriceps, hamstrings, and glutes',
-          targetMuscles: 'Quadriceps, Hamstrings, Glutes',
-          sets: 4,
-          reps: 15,
-          calories: 35,
-          imageUrl: 'assets/images/workouts/squat.jpg',
-        ),
-        Exercise(
-          name: 'Pull-ups',
-          description: 'Basic pull-ups targeting back and biceps',
-          targetMuscles: 'Back, Biceps',
-          sets: 3,
-          reps: 8,
-          calories: 40,
-          imageUrl: 'assets/images/workouts/pullup.jpg',
-        ),
-      ],
-    ),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -84,7 +45,9 @@ class _WorkoutPageState extends State<WorkoutPage> {
   }
 
   List<Workout> get filteredWorkouts {
-    return _workouts.where((workout) {
+    var workouts = WorkoutTemplates.allWorkouts;
+
+    return workouts.where((workout) {
       final matchesSearch = workout.title.toLowerCase().contains(_searchQuery) ||
           workout.description.toLowerCase().contains(_searchQuery);
       final matchesCategory = _selectedCategory == 'All' || 
@@ -195,6 +158,21 @@ class WorkoutCard extends StatelessWidget {
     required this.workout,
   }) : super(key: key);
 
+  Future<File> _getImageFile(String assetPath) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/${assetPath.split('/').last}');
+
+    if (!await file.exists()) {
+      // If file doesn't exist in cache, copy it from assets
+      final byteData = await rootBundle.load(assetPath);
+      final buffer = byteData.buffer;
+      await file.writeAsBytes(
+        buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes)
+      );
+    }
+    return file;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -210,9 +188,25 @@ class WorkoutCard extends StatelessWidget {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: Image.asset(
-                workout.imageUrl,
-                fit: BoxFit.cover,
+              child: FutureBuilder<File>(
+                future: _getImageFile(workout.imageUrl),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return Image.asset(
+                      workout.imageUrl,
+                      fit: BoxFit.cover,
+                    );
+                  }
+                  return Image.file(
+                    snapshot.data!,
+                    fit: BoxFit.cover,
+                  );
+                },
               ),
             ),
           ),
@@ -239,7 +233,7 @@ class WorkoutCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(Icons.timer_outlined, size: 16, color: Colors.grey[600]),
+                    Icon(Icons.timer_outlined, size: 16, color: Colors.blue[600]),
                     const SizedBox(width: 4),
                     Text(
                       '${workout.duration} min',
@@ -248,7 +242,7 @@ class WorkoutCard extends StatelessWidget {
                     const SizedBox(width: 16),
                     Icon(Icons.local_fire_department_outlined, 
                          size: 16, 
-                         color: Colors.grey[600]),
+                         color: Colors.orange[600]),
                     const SizedBox(width: 4),
                     Text(
                       '${workout.calories} cal',

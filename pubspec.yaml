@@ -40,6 +40,7 @@ dependencies:
   path_provider: ^2.1.2
   provider: ^6.1.1
   firebase_database: ^11.3.5
+  flutter_cache_manager: ^3.3.1
 
 dev_dependencies:
   flutter_test:
@@ -72,10 +73,18 @@ flutter:
     - assets/avatars/avatar5.png
     - assets/images/workouts/full_body.jpg
     - assets/login.jpeg
-    - assets/signup.jpeg
+    - assets/signup.jpg
     - assets/images/workouts/pushup.jpg
     - assets/images/workouts/squat.jpg
     - assets/images/workouts/pullup.jpg
+    - assets/images/workouts/upper_body.jpg
+    - assets/images/workouts/lower_body.jpg
+    - assets/images/workouts/core.jpg
+    - assets/images/workouts/bench_press.jpg
+    - assets/images/workouts/rows.jpg
+    - assets/images/workouts/plank.jpg
+    - assets/images/workouts/lunges.jpg
+    - assets/images/workouts/crunches.jpg
 
   # An image asset can refer to one or more resolution-specific "variants", sees
   # https://flutter.dev/to/resolution-aware-images

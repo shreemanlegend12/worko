@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'settings_page.dart';
 import 'providers/avatar_provider.dart';
 import 'providers/user_provider.dart';
+import 'providers/workout_provider.dart';
+import 'upgrade_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -27,9 +29,68 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Widget _buildPremiumCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4285F4),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Upgrade to Premium',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Get access to advanced workout programs and exclusive features',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const UpgradePage()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF4285F4),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            ),
+            child: const Text(
+              'View Plans',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final avatarProvider = Provider.of<AvatarProvider>(context);
+    final workoutProvider = Provider.of<WorkoutProvider>(context);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -79,15 +140,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: const [
-                  _StatColumn(count: "48", label: "Workouts"),
-                  _StatColumn(count: "124", label: "Following"),
-                  _StatColumn(count: "85", label: "Followers"),
-                ],
-              ),
-              const SizedBox(height: 30),
+              if (!workoutProvider.isPremium) _buildPremiumCard(),
+              const SizedBox(height: 20),
               Row(
                 children: const [
                   Text(
@@ -110,31 +164,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   isThreeLine: true,
                 ),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _StatColumn extends StatelessWidget {
-  final String count;
-  final String label;
-
-  const _StatColumn({required this.count, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        SizedBox(height: 4),
-        Text(label, style: TextStyle(color: Colors.grey)),
-      ],
     );
   }
 }
