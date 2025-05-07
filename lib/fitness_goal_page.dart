@@ -12,13 +12,23 @@ class FitnessGoalsPage extends StatefulWidget {
 class _FitnessGoalsPageState extends State<FitnessGoalsPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseDatabase _database = FirebaseDatabase.instance;
+  final PageController _pageController = PageController();
   
-  // Default values for sliders
+  // Default values
   double _workoutDays = 3;
   double _weeklyHours = 4;
   double _calorieGoal = 2000;
   
   bool _isLoading = false;
+
+  int _currentStep = 0;
+  final int _totalSteps = 3;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   Future<void> _saveGoalsAndContinue() async {
     if (_auth.currentUser == null) {
@@ -57,7 +67,133 @@ class _FitnessGoalsPageState extends State<FitnessGoalsPage> {
       }
     }
   }
-  
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LinearProgressIndicator(
+                value: (_currentStep + 1) / _totalSteps,
+                backgroundColor: Colors.grey[200],
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4285F4)),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Step ${_currentStep + 1} of $_totalSteps',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: (index) {
+                    setState(() {
+                      _currentStep = index;
+                    });
+                  },
+                  children: [
+                    _buildWorkoutDaysQuestion(),
+                    _buildWeeklyHoursQuestion(),
+                    _buildCalorieGoalQuestion(),
+                  ],
+                ),
+              ),
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else if (_currentStep == _totalSteps - 1)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _saveGoalsAndContinue,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4285F4),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Complete Setup',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                  ),
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      _pageController.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4285F4),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Next',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkoutDaysQuestion() {
+    return _buildQuestionCard(
+      question: 'How many days per week do you want to work out?',
+      value: '${_workoutDays.round()} days',
+      sliderValue: _workoutDays,
+      min: 1,
+      max: 7,
+      onChanged: (value) => setState(() => _workoutDays = value),
+      recommendation: 'Recommended: 3-5 days for beginners',
+    );
+  }
+
+  Widget _buildWeeklyHoursQuestion() {
+    return _buildQuestionCard(
+      question: 'How many hours per week can you commit?',
+      value: '${_weeklyHours.round()} hours',
+      sliderValue: _weeklyHours,
+      min: 1,
+      max: 20,
+      onChanged: (value) => setState(() => _weeklyHours = value),
+      recommendation: 'Recommended: 6-8 hours for optimal results',
+    );
+  }
+
+  Widget _buildCalorieGoalQuestion() {
+    // Calculate divisions for 500 calorie increments
+    int divisions = ((7000 - 1000) / 500).round();
+    
+    return _buildQuestionCard(
+      question: 'What\'s your weekly calorie burn goal?',
+      value: '${_calorieGoal.round()} calories',
+      sliderValue: _calorieGoal,
+      min: 1000,
+      max: 7000,
+      onChanged: (value) => setState(() => _calorieGoal = value.roundToDouble()),
+      recommendation: 'Recommended: 1500-2500 calories for steady weekly progress',
+    );
+  }
+
   Widget _buildQuestionCard({
     required String question,
     required String value,
@@ -67,175 +203,42 @@ class _FitnessGoalsPageState extends State<FitnessGoalsPage> {
     required Function(double) onChanged,
     required String recommendation,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            question,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF333333),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF4285F4),
-            ),
-          ),
-          Slider(
-            value: sliderValue,
-            min: min,
-            max: max,
-            divisions: max.toInt() - min.toInt(),
-            activeColor: const Color(0xFF4285F4),
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            recommendation,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    // Calculate divisions based on the range
+    int divisions;
+    if (question.contains('calorie')) {
+      divisions = ((max - min) / 500).round(); // 500 calorie increments
+    } else {
+      divisions = (max - min).toInt(); // Keep existing behavior for other sliders
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        color: const Color(0xFFF5F7FA),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 24),
-                const Text(
-                  'Your Goals',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Help us personalize your fitness journey',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF757575),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        _buildQuestionCard(
-                          question: 'How many days per week do you want to workout?',
-                          value: 'Target: ${_workoutDays.toInt()} days',
-                          sliderValue: _workoutDays,
-                          min: 1,
-                          max: 7,
-                          onChanged: (value) {
-                            setState(() {
-                              _workoutDays = value;
-                            });
-                          },
-                          recommendation: 'Recommended: 3-5 days for optimal results with rest days',
-                        ),
-                        _buildQuestionCard(
-                          question: 'How many hours can you commit per week?',
-                          value: 'Target: ${_weeklyHours.toInt()} hours',
-                          sliderValue: _weeklyHours,
-                          min: 1,
-                          max: 10,
-                          onChanged: (value) {
-                            setState(() {
-                              _weeklyHours = value;
-                            });
-                          },
-                          recommendation: 'Recommended: 4-6 hours for balanced progress',
-                        ),
-                        _buildQuestionCard(
-                          question: 'Weekly calorie burn goal?',
-                          value: 'Target: ${_calorieGoal.toInt()} calories',
-                          sliderValue: _calorieGoal,
-                          min: 1000,
-                          max: 5000,
-                          onChanged: (value) {
-                            setState(() {
-                              _calorieGoal = value;
-                            });
-                          },
-                          recommendation: 'Recommended: 2000-3000 calories for sustainable weight management',
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _saveGoalsAndContinue,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4285F4),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                : const Text(
-                                    'Continue',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          question,
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
-      ),
+        const SizedBox(height: 40),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 20),
+        Slider(
+          value: sliderValue,
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: value,
+          onChanged: onChanged,
+          activeColor: const Color(0xFF4285F4),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          recommendation,
+          style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        ),
+      ],
     );
   }
 }

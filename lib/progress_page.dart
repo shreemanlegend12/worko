@@ -16,21 +16,25 @@ class _ProgressPageState extends State<ProgressPage> {
   String _selectedPeriod = 'Weekly';
   Map<String, dynamic> _userGoals = {};
   Map<String, dynamic> _workoutStats = {
-    'totalCalories': 0,
-    'totalWorkouts': 0,
+    'weeklyCalories': 0,
+    'activeWorkoutDays': 0,
     'avgTimePerDay': 0.0,
   };
   
-  // Initialize with empty data (will be filled with real data)
-  Map<String, List<double>> activityData = {
-    'Weekly': List.filled(7, 0.0),
-    'Monthly': List.filled(31, 0.0),  // Max days in month
-  };
+  late final Map<String, List<double>> activityData = _initActivityData();
+  late final Map<String, List<String>> periodLabels = _initPeriodLabels();
   
-  final Map<String, List<String>> periodLabels = {
-    'Weekly': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    'Monthly': List.generate(31, (index) => '${index + 1}'),
-  };
+  Map<String, List<String>> _initPeriodLabels() {
+    return {
+      'Weekly': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    };
+  }
+
+  Map<String, List<double>> _initActivityData() {
+    return {
+      'Weekly': List.filled(7, 0.0),
+    };
+  }
 
   @override
   void initState() {
@@ -54,20 +58,19 @@ class _ProgressPageState extends State<ProgressPage> {
           print("No goals found, setting defaults");
           setState(() {
             _userGoals = {
-              'workoutDays': 7, // Default target
-              'calorieGoal': 5000, // Default target
-              'weeklyHours': 10, // Default target
+              'workoutDays': 4,
+              'calorieGoal': 2000,
+              'weeklyHours': 6,
             };
           });
         }
       } catch (e) {
         print("Error fetching goals: $e");
-        // Set default goals if there's an error
         setState(() {
           _userGoals = {
-            'workoutDays': 7,
-            'calorieGoal': 5000,
-            'weeklyHours': 10,
+            'workoutDays': 4,
+            'calorieGoal': 2000,
+            'weeklyHours': 6,
           };
         });
       }
@@ -84,195 +87,99 @@ class _ProgressPageState extends State<ProgressPage> {
     }
 
     try {
-      // Use local device time to ensure we're in user's timezone
       final now = DateTime.now();
-      print("Fetching $_selectedPeriod workout stats for user: $userId");
-      print("Current device time: ${now.toString()}");
-      print("Current weekday: ${now.weekday} (1=Monday, 7=Sunday)");
-      
-      // Initialize default data with correct size
-      int daysToShow = _selectedPeriod == 'Weekly' ? 7 : DateTime(now.year, now.month + 1, 0).day;
+      print("DEBUG: Current date: ${now.toString()}");
+
+      DateTime startDate = now.subtract(Duration(days: now.weekday - 1));
+      startDate = DateTime(startDate.year, startDate.month, startDate.day);
+      DateTime endDate = startDate.add(const Duration(days: 6));
+      int daysToShow = 7;
+
+      print("DEBUG: Start date: $startDate");
+      print("DEBUG: End date: $endDate");
+
       List<double> newActivityData = List.filled(daysToShow, 0.0);
-      
-      // Calculate period dates using local device time
-      DateTime startDate;
-      if (_selectedPeriod == 'Weekly') {
-        // Find start of the week (Monday) based on current device time
-        startDate = now.subtract(Duration(days: now.weekday - 1));
-        // Force midnight to ensure full day inclusion
-        startDate = DateTime(startDate.year, startDate.month, startDate.day);
-      } else {
-        // Start of month
-        startDate = DateTime(now.year, now.month, 1);
-      }
-          
-      print("Period start date: ${startDate.toString()}");
-      
-      final endDate = _selectedPeriod == 'Weekly'
-          ? startDate.add(const Duration(days: 6))
-          : DateTime(now.year, now.month + 1, 0);
-      
-      final workoutHistoryRef = _database.ref('workoutHistory/$userId');
-      print("Querying workout history from ${startDate.toIso8601String()} to ${endDate.toIso8601String()}");
-      
-      // Get workout stats for current period
+
       Map<String, dynamic> periodStats = {
-        'totalCalories': 0,
-        'totalWorkouts': 0,
-        'totalDuration': 0, // in minutes
+        'weeklyCalories': 0,
+        'activeWorkoutDays': Set<int>(),
+        'totalDuration': 0,
       };
-      
-      // Fetch all workout history
+
+      final workoutHistoryRef = _database.ref('workoutHistory/$userId');
       final historySnapshot = await workoutHistoryRef.get();
       
       if (historySnapshot.exists) {
         final historyData = Map<String, dynamic>.from(historySnapshot.value as Map);
         Map<int, Map<String, dynamic>> dayWorkouts = {};
         
-        // Process each workout
         historyData.forEach((key, value) {
-          try {
-            if (value != null) {
-              final workout = Map<String, dynamic>.from(value as Map);
-              if (workout.containsKey('completedAt')) {
-                // Parse the workout completion time, ensuring we're dealing with local time
-                final completedAtString = workout['completedAt'] as String;
-                print("Raw completedAt: $completedAtString");
+          if (value != null) {
+            final workout = Map<String, dynamic>.from(value as Map);
+            if (workout.containsKey('completedAt')) {
+              DateTime completedAt = DateTime.parse(workout['completedAt'] as String).toLocal();
+              
+              if (completedAt.isAfter(startDate.subtract(const Duration(minutes: 1))) && 
+                  completedAt.isBefore(endDate.add(const Duration(days: 1)))) {
                 
-                // Parse the date with timezone awareness
-                DateTime completedAt;
-                try {
-                  // Try to parse with timezone if present
-                  completedAt = DateTime.parse(completedAtString);
-                  // Convert to local time if the timestamp has timezone info
-                  final bool hasTimeZone = completedAtString.contains('Z') || 
-                                          completedAtString.contains('+') || 
-                                          completedAtString.contains('-');
-                  if (hasTimeZone) {
-                    // If it has timezone info, ensure it's converted to local
-                    final offset = DateTime.now().timeZoneOffset;
-                    completedAt = completedAt.add(offset);
-                  }
-                } catch (e) {
-                  // Fallback if parsing fails
-                  print("Date parsing error: $e");
-                  completedAt = DateTime.now();
+                int dayIndex = completedAt.weekday - 1;
+                
+                print("DEBUG: Processing workout completed at $completedAt, dayIndex: $dayIndex");
+
+                if (!dayWorkouts.containsKey(dayIndex)) {
+                  dayWorkouts[dayIndex] = {
+                    'count': 0,
+                    'calories': 0,
+                    'duration': 0,
+                  };
+                }
+
+                dayWorkouts[dayIndex]!['count'] = (dayWorkouts[dayIndex]!['count'] as int) + 1;
+                (periodStats['activeWorkoutDays'] as Set<int>).add(dayIndex);
+                
+                if (workout.containsKey('caloriesBurned')) {
+                  int calories = workout['caloriesBurned'] as int? ?? 0;
+                  dayWorkouts[dayIndex]!['calories'] = (dayWorkouts[dayIndex]!['calories'] as int) + calories;
+                  periodStats['weeklyCalories'] = (periodStats['weeklyCalories'] as int) + calories;
                 }
                 
-                print("Processed completedAt: ${completedAt.toString()}, weekday: ${completedAt.weekday}");
-                
-                // Check if workout is within the selected period
-                if (completedAt.isAfter(startDate.subtract(const Duration(minutes: 1))) && 
-                    completedAt.isBefore(endDate.add(const Duration(days: 1)))) {
-                  
-                  // Calculate which day of the week/month this workout belongs to
-                  int dayDiff;
-                  if (_selectedPeriod == 'Weekly') {
-                    // For weekly view, index should be 0-6 corresponding to Mon-Sun
-                    dayDiff = completedAt.weekday - 1; // Weekday is 1-7 where 1 is Monday
-                  } else {
-                    // For monthly view, index should be 0-30 corresponding to day of month
-                    dayDiff = completedAt.day - 1;
-                  }
-                  
-                  print("Workout on ${_selectedPeriod == 'Weekly' ? 'weekday' : 'day'}: ${dayDiff + 1} (from $completedAt)");
-                  
-                  // Create or update day stats
-                  if (!dayWorkouts.containsKey(dayDiff)) {
-                    dayWorkouts[dayDiff] = {
-                      'count': 0,
-                      'calories': 0,
-                      'duration': 0,
-                    };
-                  }
-                  
-                  // Update workout counts
-                  dayWorkouts[dayDiff]!['count'] = (dayWorkouts[dayDiff]!['count'] as int) + 1;
-                  
-                  // Add calories if available
-                  if (workout.containsKey('caloriesBurned')) {
-                    int calories = workout['caloriesBurned'] as int? ?? 0;
-                    dayWorkouts[dayDiff]!['calories'] = (dayWorkouts[dayDiff]!['calories'] as int) + calories;
-                    periodStats['totalCalories'] = (periodStats['totalCalories'] as int) + calories;
-                  }
-                  
-                  // Add duration if available
-                  if (workout.containsKey('duration')) {
-                    int duration = workout['duration'] as int? ?? 0;
-                    dayWorkouts[dayDiff]!['duration'] = (dayWorkouts[dayDiff]!['duration'] as int) + duration;
-                    periodStats['totalDuration'] = (periodStats['totalDuration'] as int) + duration;
-                  }
-                  
-                  // Increment total workouts
-                  periodStats['totalWorkouts'] = (periodStats['totalWorkouts'] as int) + 1;
+                if (workout.containsKey('duration')) {
+                  int duration = workout['duration'] as int? ?? 0;
+                  dayWorkouts[dayIndex]!['duration'] = (dayWorkouts[dayIndex]!['duration'] as int) + duration;
+                  periodStats['totalDuration'] = (periodStats['totalDuration'] as int) + duration;
                 }
               }
             }
-          } catch (e) {
-            print("Error processing workout $key: $e");
           }
         });
 
-        print("Day workouts data: $dayWorkouts");
-        print("Period stats: $periodStats");
-
-        // Convert to activity data - we'll use workout counts for the graph
+        print("DEBUG: Day workouts data: $dayWorkouts");
+        
         dayWorkouts.forEach((day, stats) {
           if (day >= 0 && day < newActivityData.length) {
-            newActivityData[day] = (stats['count'] as int).toDouble();
+            newActivityData[day] = stats['count'] > 0 ? 1.0 : 0.0;
           }
         });
 
-        // Normalize the data (only if there's actual data)
-        double maxValue = newActivityData.reduce((max, value) => max > value ? max : value);
-        print("Max activity value: $maxValue");
-        
-        if (maxValue > 0) {
-          for (var i = 0; i < newActivityData.length; i++) {
-            newActivityData[i] = newActivityData[i] / maxValue;
-          }
-        }
-
-        // Update state with real data
-        setState(() {
-          activityData[_selectedPeriod] = newActivityData;
-          
-          // Calculate average time per day
-          double avgTimePerDay = 0.0;
-          if (periodStats['totalDuration'] > 0) {
-            avgTimePerDay = (periodStats['totalDuration'] as int).toDouble() / daysToShow;
-          }
-          
-          _workoutStats = {
-            'totalCalories': periodStats['totalCalories'],
-            'totalWorkouts': periodStats['totalWorkouts'],
-            'avgTimePerDay': avgTimePerDay,
-          };
-        });
-        
-        print("Updated activity data: ${activityData[_selectedPeriod]}");
-        print("Updated workout stats: $_workoutStats");
-      } else {
-        print("No workout history found, using zeros");
         setState(() {
           activityData[_selectedPeriod] = newActivityData;
           _workoutStats = {
-            'totalCalories': 0,
-            'totalWorkouts': 0,
-            'avgTimePerDay': 0.0,
+            'weeklyCalories': periodStats['weeklyCalories'],
+            'activeWorkoutDays': (periodStats['activeWorkoutDays'] as Set<int>).length,
+            'avgTimePerDay': periodStats['totalDuration'] > 0 
+                ? (periodStats['totalDuration'] as int).toDouble() / daysToShow 
+                : 0.0,
           };
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print("Error fetching workout stats: $e");
+      print("Stack trace: $stackTrace");
       setState(() {
-        activityData[_selectedPeriod] = List.filled(
-          _selectedPeriod == 'Weekly' ? 7 : DateTime(DateTime.now().year, DateTime.now().month + 1, 0).day,
-          0.0
-        );
+        activityData[_selectedPeriod] = List.filled(7, 0.0);
         _workoutStats = {
-          'totalCalories': 0,
-          'totalWorkouts': 0,
+          'weeklyCalories': 0,
+          'activeWorkoutDays': 0,
           'avgTimePerDay': 0.0,
         };
       });
@@ -290,7 +197,7 @@ class _ProgressPageState extends State<ProgressPage> {
           'weeklyHours': weeklyHours,
         });
         print("Goals saved successfully");
-        _fetchGoals(); // Refresh data after update
+        _fetchGoals();
       } catch (e) {
         print("Error saving goals: $e");
       }
@@ -298,9 +205,9 @@ class _ProgressPageState extends State<ProgressPage> {
   }
 
   Widget _buildGoalsCard() {
-    int workoutDays = _userGoals['workoutDays'] ?? 7;
-    int calorieGoal = _userGoals['calorieGoal'] ?? 5000;
-    int weeklyHours = _userGoals['weeklyHours'] ?? 10;
+    int workoutDays = _userGoals['workoutDays'] ?? 5;
+    int calorieGoal = _userGoals['calorieGoal'] ?? 2000;
+    int weeklyHours = _userGoals['weeklyHours'] ?? 6;
 
     return Card(
       elevation: 0,
@@ -331,7 +238,7 @@ class _ProgressPageState extends State<ProgressPage> {
                               content: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text('Weekly Workout Days: ${workoutValue.round()}'),
+                                  Text('Weekly Active Days: ${workoutValue.round()}'),
                                   Slider(
                                     value: workoutValue,
                                     min: 1,
@@ -346,19 +253,19 @@ class _ProgressPageState extends State<ProgressPage> {
                                   Slider(
                                     value: hoursValue,
                                     min: 1,
-                                    max: 10,
-                                    divisions: 9,
+                                    max: 20,
+                                    divisions: 19,
                                     onChanged: (value) {
                                       setState(() => hoursValue = value);
                                     },
                                   ),
                                   const SizedBox(height: 16),
-                                  Text('Monthly Calorie Goal: ${calorieValue.round()}'),
+                                  Text('Weekly Calorie Goal: ${calorieValue.round()}'),
                                   Slider(
                                     value: calorieValue,
                                     min: 1000,
-                                    max: 5000,
-                                    divisions: 40,
+                                    max: 7000,
+                                    divisions: 12,
                                     onChanged: (value) {
                                       setState(() => calorieValue = value);
                                     },
@@ -392,11 +299,11 @@ class _ProgressPageState extends State<ProgressPage> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildGoalProgress('Weekly Workouts', workoutDays, 7, const Color(0xFF4285F4)),
+            _buildGoalProgress('Weekly Active Days', workoutDays, 7, const Color(0xFF4285F4)),
             const SizedBox(height: 16),
-            _buildGoalProgress('Weekly Hours', weeklyHours, 10, const Color(0xFF4285F4)),
+            _buildGoalProgress('Weekly Hours', weeklyHours, 20, const Color(0xFF4285F4)),
             const SizedBox(height: 16),
-            _buildGoalProgress('Monthly Calories', calorieGoal, 5000, const Color(0xFF4285F4)),
+            _buildGoalProgress('Weekly Calories', calorieGoal, 3500, const Color(0xFF4285F4)),
           ],
         ),
       ),
@@ -415,8 +322,6 @@ class _ProgressPageState extends State<ProgressPage> {
             children: [
               const Text('Progress', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
-              _buildPeriodSelector(),
-              const SizedBox(height: 16),
               _buildActivityCard(),
               const SizedBox(height: 16),
               _buildMetricsRow(),
@@ -429,50 +334,10 @@ class _ProgressPageState extends State<ProgressPage> {
     );
   }
 
-  Widget _buildPeriodSelector() {
-    return Row(
-      children: [
-        _periodButton('Weekly', _selectedPeriod == 'Weekly'),
-        const SizedBox(width: 10),
-        _periodButton('Monthly', _selectedPeriod == 'Monthly'),
-      ],
-    );
-  }
-
-  Widget _periodButton(String text, bool isSelected) {
-    return ElevatedButton(
-      onPressed: () => setState(() {
-        _selectedPeriod = text;
-        _fetchWorkoutStats();
-      }),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? const Color(0xFF4285F4) : Colors.white,
-        foregroundColor: isSelected ? Colors.white : Colors.black87,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      ),
-      child: Text(text),
-    );
-  }
-
   Widget _buildActivityCard() {
-    // Use local device time for determining today
     final now = DateTime.now();
-    print("Building activity card with now: ${now.toString()}, weekday: ${now.weekday}");
+    final todayIndex = now.weekday - 1;
     
-    // Make sure we're using the correct weekday (1-7, where 1 is Monday)
-    // This ensures Wednesday shows up as the 3rd day (index 2)
-    final todayIndex = _selectedPeriod == 'Weekly' 
-        ? now.weekday - 1  // 0 = Monday, 6 = Sunday
-        : now.day - 1;     // 0-based day of month
-        
-    print("Today's index in graph: $todayIndex");
-
-    final dataLength = _selectedPeriod == 'Weekly' 
-        ? 7 
-        : DateTime(now.year, now.month + 1, 0).day;
-
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -481,48 +346,19 @@ class _ProgressPageState extends State<ProgressPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$_selectedPeriod Activity', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            const Text('Weekly Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 150,
-              child: _selectedPeriod == 'Monthly' 
-                ? SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: List.generate(
-                        dataLength,
-                        (index) => Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: _buildActivityBar(
-                            index < activityData[_selectedPeriod]!.length 
-                                ? activityData[_selectedPeriod]![index] 
-                                : 0.0,
-                            index < periodLabels[_selectedPeriod]!.length 
-                                ? periodLabels[_selectedPeriod]![index] 
-                                : '$index',
-                            index == todayIndex,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: List.generate(
-                      dataLength,
-                      (index) => _buildActivityBar(
-                        index < activityData[_selectedPeriod]!.length 
-                            ? activityData[_selectedPeriod]![index] 
-                            : 0.0,
-                        index < periodLabels[_selectedPeriod]!.length 
-                            ? periodLabels[_selectedPeriod]![index] 
-                            : '$index',
-                        index == todayIndex,
-                      ),
-                    ),
-                  ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(
+                7,
+                (index) => _buildActivityBar(
+                  activityData['Weekly']![index],
+                  periodLabels['Weekly']![index],
+                  index == todayIndex,
+                ),
+              ),
             ),
           ],
         ),
@@ -531,15 +367,13 @@ class _ProgressPageState extends State<ProgressPage> {
   }
 
   Widget _buildActivityBar(double height, String label, bool isHighlighted) {
-    final bool isMonthly = _selectedPeriod == 'Monthly';
-    // Ensure minimum height so bars are always visible even if value is 0
     final double barHeight = height > 0 ? 120 * height : 2;
     
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Container(
-          width: isMonthly ? 20 : 30,
+          width: 30,
           height: barHeight,
           decoration: BoxDecoration(
             color: isHighlighted ? const Color(0xFF4285F4) : const Color(0xFFA4CAFB),
@@ -548,13 +382,10 @@ class _ProgressPageState extends State<ProgressPage> {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          width: isMonthly ? 20 : 30,
+          width: 30,
           child: Text(
             label, 
-            style: TextStyle(
-              fontSize: isMonthly ? 10 : 12,
-              color: Colors.grey
-            ),
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
             textAlign: TextAlign.center,
           ),
         ),
@@ -565,12 +396,12 @@ class _ProgressPageState extends State<ProgressPage> {
   Widget _buildMetricsRow() {
     return Row(
       children: [
-        Expanded(child: _buildMetricCard('${_workoutStats['totalWorkouts']}', 'Workouts')),
+        Expanded(child: _buildMetricCard('${_workoutStats['activeWorkoutDays']}', 'Active Days')),
         const SizedBox(width: 12),
-        Expanded(child: _buildMetricCard('${_workoutStats['totalCalories']}', 'Calories')),
+        Expanded(child: _buildMetricCard('${_workoutStats['weeklyCalories']}', 'Weekly Calories')),
         const SizedBox(width: 12),
         Expanded(child: _buildMetricCard(
-          _workoutStats['avgTimePerDay'].toStringAsFixed(1), 
+          (_workoutStats['avgTimePerDay'] / 60).toStringAsFixed(2), 
           'Avg min/Day'
         )),
       ],
@@ -596,17 +427,39 @@ class _ProgressPageState extends State<ProgressPage> {
 
   Widget _buildGoalProgress(String label, num target, num maxTarget, Color color) {
     num currentValue = 0;
+    String displayValue = '';
+    String displayTarget = '';
     
     switch (label) {
-      case 'Weekly Workouts':
-        currentValue = _workoutStats['totalWorkouts'] ?? 0;
+      case 'Weekly Active Days':
+        currentValue = _workoutStats['activeWorkoutDays'] ?? 0;
+        displayValue = currentValue.toString();
+        displayTarget = target.toString();
         break;
-      case 'Monthly Calories':
-        currentValue = _workoutStats['totalCalories'] ?? 0;
+      case 'Weekly Calories':
+        currentValue = _workoutStats['weeklyCalories'] ?? 0;
+        displayValue = currentValue.toString();
+        displayTarget = target.toString();
         break;
       case 'Weekly Hours':
-        // Convert from minutes to hours
-        currentValue = ((_workoutStats['avgTimePerDay'] ?? 0) * 7 / 60).toDouble();
+        double totalSeconds = (_workoutStats['avgTimePerDay'] ?? 0) * 7;
+        double totalMinutes = totalSeconds / 60; // Convert seconds to minutes
+        currentValue = totalMinutes / 60; // Convert minutes to hours for progress calculation
+        
+        if (totalSeconds < 60) {
+          // Show as seconds if less than a minute
+          displayValue = "${totalSeconds.toInt()} sec";
+          displayTarget = "$target hrs";
+        } else if (totalMinutes < 60) {
+          // Show minutes and seconds if less than an hour
+          int minutes = totalMinutes.floor();
+          displayValue = "$minutes min";
+          displayTarget = "$target hrs";
+        } else {
+          // Show hours
+          displayValue = "${currentValue.toStringAsFixed(1)} hrs";
+          displayTarget = "$target hrs";
+        }
         break;
     }
 
@@ -627,7 +480,12 @@ class _ProgressPageState extends State<ProgressPage> {
           ),
         ),
         const SizedBox(height: 4),
-        Text('$currentValue / $target', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(
+          label == 'Weekly Hours' 
+              ? '$displayValue / $displayTarget'
+              : '$currentValue / $target', 
+          style: const TextStyle(fontSize: 12, color: Colors.grey)
+        ),
       ],
     );
   }

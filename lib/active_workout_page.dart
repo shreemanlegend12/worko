@@ -132,28 +132,6 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
             'weekStart': weekStart.toIso8601String(),
           });
         }
-
-        // Update monthly stats
-        final monthStart = DateTime(now.year, now.month, 1);
-        final monthKey = '${monthStart.year}-${monthStart.month}-${monthStart.day}';
-        final monthlyStatsRef = FirebaseDatabase.instance.ref('monthlyStats/$userId/$monthKey');
-        final monthlySnapshot = await monthlyStatsRef.get();
-
-        if (monthlySnapshot.exists) {
-          final data = Map<String, dynamic>.from(monthlySnapshot.value as Map);
-          await monthlyStatsRef.update({
-            'totalCalories': (data['totalCalories'] ?? 0) + _caloriesBurned,
-            'totalWorkouts': (data['totalWorkouts'] ?? 0) + 1,
-            'totalDuration': (data['totalDuration'] ?? 0) + _elapsed.inSeconds,
-          });
-        } else {
-          await monthlyStatsRef.set({
-            'totalCalories': _caloriesBurned,
-            'totalWorkouts': 1,
-            'totalDuration': _elapsed.inSeconds,
-            'monthStart': monthStart.toIso8601String(),
-          });
-        }
       }
 
       if (!mounted) return;

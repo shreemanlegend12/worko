@@ -45,8 +45,6 @@ class _SignUpPageState extends State<SignUpPage> {
         final now = DateTime.now();
         final weekStart = now.subtract(Duration(days: now.weekday - 1));
         final weekKey = '${weekStart.year}-${weekStart.month}-${weekStart.day}';
-        final monthStart = DateTime(now.year, now.month, 1);
-        final monthKey = '${monthStart.year}-${monthStart.month}-${monthStart.day}';
 
         // Initialize user data structure
         await _database.ref().child('users').child(userCredential.user!.uid).set({
@@ -63,21 +61,26 @@ class _SignUpPageState extends State<SignUpPage> {
           'weekStart': weekStart.toIso8601String(),
         });
 
-        await _database.ref('monthlyStats/${userCredential.user!.uid}/$monthKey').set({
-          'totalCalories': 0,
-          'totalWorkouts': 0,
-          'totalDuration': 0,
-          'monthStart': monthStart.toIso8601String(),
-        });
-
-        // Initialize user goals with defaults
+        // Initialize user goals with defaults (will be updated in questionnaire)
         await _database.ref('userGoals/${userCredential.user!.uid}').set({
-          'workoutDays': 3,  // Conservative default
-          'calorieGoal': 2000,  // Conservative default
-          'weeklyHours': 5,  // Conservative default
+          'workoutDays': 3,
+          'calorieGoal': 2000,
+          'weeklyHours': 5,
+          'fitnessLevel': 'Beginner',
+          'primaryGoal': 'Get Fit',
+          'preferredWorkouts': [],
+          'createdAt': DateTime.now().toIso8601String(),
         });
         
         if (mounted) {
+          // Show a welcome message
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account created successfully! Let\'s set up your fitness profile.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          
           // Navigate to the fitness goals questionnaire
           Navigator.pushReplacementNamed(context, '/fitness-goals');
         }
